@@ -22,6 +22,7 @@ class WifiChangeListener(private val callback: (type: NetworkChangeType?, networ
     }
 
     fun startListening(context: Context) {
+        if (isListening) return
 
         // Wi-Fi connected network state
         val cm =
@@ -67,15 +68,37 @@ class WifiChangeListener(private val callback: (type: NetworkChangeType?, networ
                 super.onLost(network)
                 callback(NetworkChangeType.NETWORK_LOST, network)
             }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) {
+                super.onCapabilitiesChanged(network, networkCapabilities)
+                callback(NetworkChangeType.NETWORK_AVAILABLE, network)
+            }
         }
 
     private val wifiStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent) {
-
             when (intent.action) {
+                WifiManager.WIFI_STATE_CHANGED_ACTION -> {
+                    val state = intent.getIntExtra(
+                        WifiManager.EXTRA_WIFI_STATE,
+                        WifiManager.WIFI_STATE_UNKNOWN
+                    )
+                    when (state) {
+                        WifiManager.WIFI_STATE_DISABLED,
+                        WifiManager.WIFI_STATE_DISABLING -> {
+                            callback(NetworkChangeType.NETWORK_LOST, null)
+                        }
+                        WifiManager.WIFI_STATE_ENABLED,
+                        WifiManager.WIFI_STATE_ENABLING -> {
+                            callback(NetworkChangeType.SIGNAL_STRENGTH, null)
+                        }
+                    }
+                }
                 WifiManager.RSSI_CHANGED_ACTION,
-                WifiManager.NETWORK_STATE_CHANGED_ACTION,
-                WifiManager.WIFI_STATE_CHANGED_ACTION -> callback(
+                WifiManager.NETWORK_STATE_CHANGED_ACTION -> callback(
                     NetworkChangeType.SIGNAL_STRENGTH,
                     null
                 )

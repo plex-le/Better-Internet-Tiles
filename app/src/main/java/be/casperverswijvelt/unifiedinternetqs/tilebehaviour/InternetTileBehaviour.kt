@@ -59,10 +59,11 @@ class InternetTileBehaviour(
             val wifiEnabled = getWifiEnabled(context)
 
             when {
-                (TileSyncService.isTurningOnWifi || wifiEnabled) && !TileSyncService.isTurningOnData -> {
+                (TileSyncService.isTurningOnWifi || (wifiEnabled && !TileSyncService.isTurningOffWifi)) && !TileSyncService.isTurningOnData -> {
 
                     if (wifiEnabled) {
                         TileSyncService.isTurningOnWifi = false
+                        TileSyncService.isTurningOffWifi = false
                     }
 
                     val showSSID = runBlocking {

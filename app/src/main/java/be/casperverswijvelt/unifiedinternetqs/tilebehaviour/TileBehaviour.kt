@@ -39,18 +39,7 @@ abstract class TileBehaviour(
     open val lookSettings: Array<ISetting<*>> = arrayOf()
 
     val finalTileState: TileState
-        get() {
-            return if (TileSyncService.isRunning) {
-                tileState
-            } else {
-                TileState().apply {
-                    icon = defaultIcon.resId
-                    label = tileName
-                    subtitle = "Service not active"
-                    state = Tile.STATE_INACTIVE
-                }
-            }
-        }
+        get() = tileState
 
     abstract fun onClick()
 

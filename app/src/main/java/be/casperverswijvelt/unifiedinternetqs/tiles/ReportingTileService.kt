@@ -1,6 +1,7 @@
 package be.casperverswijvelt.unifiedinternetqs.tiles
 
 import android.content.ComponentName
+import android.content.Intent
 import android.graphics.drawable.Icon
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -59,6 +60,19 @@ abstract class ReportingTileService: TileService() {
     override fun onStartListening() {
         super.onStartListening()
         log("Start listening")
+        if (!TileSyncService.isRunning) {
+            try {
+                startForegroundService(
+                    Intent(
+                        applicationContext,
+                        TileSyncService::class.java
+                    )
+                )
+            } catch (e: Throwable) {
+                Log.w(getTag(), "Failed to start TileSyncService from onStartListening", e)
+            }
+        }
+        TileSyncService.refreshWifiStatus(applicationContext)
         TileSyncService.addBehaviourListener(tileBehaviour)
         syncTile(tileBehaviour.finalTileState)
     }

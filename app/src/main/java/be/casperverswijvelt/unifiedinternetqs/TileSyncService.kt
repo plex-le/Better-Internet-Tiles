@@ -16,7 +16,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Network
 import android.nfc.NfcAdapter
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.service.quicksettings.TileService
 import android.telephony.ServiceState
 import android.util.Log
@@ -37,7 +39,9 @@ import be.casperverswijvelt.unifiedinternetqs.tiles.MobileDataTileService
 import be.casperverswijvelt.unifiedinternetqs.tiles.NFCTileService
 import be.casperverswijvelt.unifiedinternetqs.tiles.WifiTileService
 import be.casperverswijvelt.unifiedinternetqs.ui.MainActivity
+import be.casperverswijvelt.unifiedinternetqs.util.checkIsWifiConnected
 import be.casperverswijvelt.unifiedinternetqs.util.getConnectedWifiSSID
+import be.casperverswijvelt.unifiedinternetqs.util.getWifiEnabled
 
 
 const val ACT_BATTERY_LEVEL_CHANGED = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
@@ -60,8 +64,60 @@ class TileSyncService: Service() {
         var isTurningOffData = false
         var serviceState: ServiceState? = null
 
+        private val handler = Handler(Looper.getMainLooper())
+        private const val TRANSITION_TIMEOUT_MS = 6000L
+        private val wifiLock = Any()
+
+        private var wifiOnTimeoutRunnable: Runnable? = null
+        private var wifiOffTimeoutRunnable: Runnable? = null
+
+        @Volatile
         var isTurningOnWifi = false
+            set(value) {
+                synchronized(wifiLock) {
+                    field = value
+                    wifiOnTimeoutRunnable?.let { handler.removeCallbacks(it) }
+                    wifiOnTimeoutRunnable = null
+                    if (value) {
+                        val runnable = Runnable {
+                            synchronized(wifiLock) {
+                                if (field) {
+                                    Log.w(TAG, "isTurningOnWifi timed out (${TRANSITION_TIMEOUT_MS}ms), auto-resetting")
+                                    field = false
+                                    instance?.updateWifiTile()
+                                    instance?.updateInternetTile()
+                                }
+                            }
+                        }
+                        wifiOnTimeoutRunnable = runnable
+                        handler.postDelayed(runnable, TRANSITION_TIMEOUT_MS)
+                    }
+                }
+            }
+
+        @Volatile
         var isTurningOffWifi = false
+            set(value) {
+                synchronized(wifiLock) {
+                    field = value
+                    wifiOffTimeoutRunnable?.let { handler.removeCallbacks(it) }
+                    wifiOffTimeoutRunnable = null
+                    if (value) {
+                        val runnable = Runnable {
+                            synchronized(wifiLock) {
+                                if (field) {
+                                    Log.w(TAG, "isTurningOffWifi timed out (${TRANSITION_TIMEOUT_MS}ms), auto-resetting")
+                                    field = false
+                                    instance?.updateWifiTile()
+                                    instance?.updateInternetTile()
+                                }
+                            }
+                        }
+                        wifiOffTimeoutRunnable = runnable
+                        handler.postDelayed(runnable, TRANSITION_TIMEOUT_MS)
+                    }
+                }
+            }
 
         var isTurningOnNFC = false
         var isTurningOffNFC = false
@@ -85,19 +141,56 @@ class TileSyncService: Service() {
         fun removeBehaviourListener(tileBehaviour: TileBehaviour) {
             behaviourListeners.remove(tileBehaviour)
         }
+
+        fun refreshWifiStatus(context: Context) {
+            val isEnabled = getWifiEnabled(context)
+            val isConnected = isEnabled && checkIsWifiConnected(context)
+
+            // Self-healing: if state contradicts turning on/off flags, clear them
+            if (isEnabled && isTurningOnWifi) {
+                isTurningOnWifi = false
+            }
+            if (!isEnabled && isTurningOffWifi) {
+                isTurningOffWifi = false
+            }
+
+            wifiConnected = isConnected
+            if (isEnabled && isConnected) {
+                getConnectedWifiSSID(context) { ssid ->
+                    wifiSSID = ssid
+                    instance?.updateWifiTile()
+                    instance?.updateInternetTile()
+                }
+            } else {
+                wifiSSID = null
+                latestAvailableWifiNetwork = null
+                instance?.updateWifiTile()
+                instance?.updateInternetTile()
+            }
+        }
     }
 
     private val wifiChangeListener: WifiChangeListener = WifiChangeListener { type, network ->
         when(type) {
             NetworkChangeType.NETWORK_LOST -> {
-                // If the network that is lost is not the latest
-                //  network that became available, we are still
-                //  connected.
-                wifiConnected = latestAvailableWifiNetwork != network
+                wifiConnected = checkIsWifiConnected(applicationContext)
+                if (!wifiConnected) {
+                    latestAvailableWifiNetwork = null
+                    wifiSSID = null
+                }
             }
             NetworkChangeType.NETWORK_AVAILABLE -> {
                 latestAvailableWifiNetwork = network
                 wifiConnected = true
+                if (isTurningOnWifi) {
+                    isTurningOnWifi = false
+                }
+            }
+            NetworkChangeType.SIGNAL_STRENGTH -> {
+                wifiConnected = checkIsWifiConnected(applicationContext)
+                if (!wifiConnected) {
+                    wifiSSID = null
+                }
             }
             else -> {}
         }
@@ -109,6 +202,8 @@ class TileSyncService: Service() {
         }
 
         if (wifiConnected) {
+            updateWifiTile()
+            updateInternetTile()
             getConnectedWifiSSID(applicationContext) { setSSID(it) }
         } else {
             setSSID(null)
@@ -201,7 +296,18 @@ class TileSyncService: Service() {
         instance = this
 
         // Wi-Fi
+        wifiConnected = checkIsWifiConnected(applicationContext)
         wifiChangeListener.startListening(applicationContext)
+        if (wifiConnected) {
+            getConnectedWifiSSID(applicationContext) { ssid ->
+                wifiSSID = ssid
+                updateWifiTile()
+                updateInternetTile()
+            }
+        } else {
+            latestAvailableWifiNetwork = null
+            wifiSSID = null
+        }
 
         // Cellular
         cellularChangeListener.startListening(applicationContext)
@@ -251,6 +357,9 @@ class TileSyncService: Service() {
         Log.d(TAG, "onDestroy")
 
         instance = null
+
+        isTurningOnWifi = false
+        isTurningOffWifi = false
 
         wifiChangeListener.stopListening(applicationContext)
         cellularChangeListener.stopListening(applicationContext)

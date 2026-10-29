@@ -50,7 +50,10 @@ class WifiTileBehaviour(
 
             if ((wifiEnabled && !TileSyncService.isTurningOffWifi) || TileSyncService.isTurningOnWifi) {
 
-                if (wifiEnabled) TileSyncService.isTurningOnWifi = false
+                if (wifiEnabled) {
+                    TileSyncService.isTurningOnWifi = false
+                    TileSyncService.isTurningOffWifi = false
+                }
 
                 val showSSID = runBlocking {
                     !preferences.getHideWiFiSSID.first()
@@ -73,7 +76,11 @@ class WifiTileBehaviour(
 
             } else {
 
-                if (!wifiEnabled) TileSyncService.isTurningOffWifi = false
+                if (!wifiEnabled) {
+                    TileSyncService.isTurningOffWifi = false
+                    TileSyncService.wifiConnected = false
+                    TileSyncService.wifiSSID = null
+                }
 
                 tile.label = resources.getString(R.string.wifi)
                 tile.state = Tile.STATE_INACTIVE
@@ -111,18 +118,18 @@ class WifiTileBehaviour(
             TileSyncService.isTurningOnWifi = false
             TileSyncService.isTurningOffWifi = true
             executeShellCommandAsync("svc wifi disable", context) {
-                if (it?.isSuccess != true) {
-                    TileSyncService.isTurningOffWifi = false
-                }
+                TileSyncService.isTurningOffWifi = false
+                TileSyncService.isTurningOnWifi = false
+                TileSyncService.refreshWifiStatus(context)
                 updateTile()
             }
         } else {
             TileSyncService.isTurningOnWifi = true
             TileSyncService.isTurningOffWifi = false
             executeShellCommandAsync("svc wifi enable", context) {
-                if (it?.isSuccess != true) {
-                    TileSyncService.isTurningOnWifi = false
-                }
+                TileSyncService.isTurningOffWifi = false
+                TileSyncService.isTurningOnWifi = false
+                TileSyncService.refreshWifiStatus(context)
                 updateTile()
             }
         }

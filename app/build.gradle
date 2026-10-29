@@ -11,7 +11,7 @@ ext {
 android {
 
     defaultConfig {
-        applicationId "be.casperverswijvelt.unifiedinternetqs"
+        applicationId "be.casperverswijvelt.unifiedinternetqs.mod"
         targetSdkVersion 35
         compileSdk 35
         minSdkVersion 31

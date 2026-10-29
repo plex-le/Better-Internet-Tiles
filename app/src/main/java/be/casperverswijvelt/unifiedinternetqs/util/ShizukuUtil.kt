@@ -1,6 +1,7 @@
 package be.casperverswijvelt.unifiedinternetqs.util
 
 import android.content.pm.PackageManager
+import android.util.Log
 import rikka.shizuku.Shizuku
 
 /**
@@ -55,15 +56,23 @@ object ShizukuUtil {
 
     }
 
-    fun executeCommand(command: String): Process {
-        // I tried working with a Shizuku user bound process and using hidden APIs, but did not
-        //  fully get it to work, so I just use the same commands as I did when using SU.
-        val process = Shizuku.newProcess(
-            command.split(' ').toTypedArray(),
-            null,
+    fun executeCommand(command: String): Process? {
+        return try {
+            val args = if (command.contains("|") || command.contains(">") || command.startsWith("sh -c")) {
+                arrayOf("sh", "-c", command)
+            } else {
+                command.split(' ').toTypedArray()
+            }
+            val process = Shizuku.newProcess(
+                args,
+                null,
+                null
+            )
+            process.waitFor()
+            process
+        } catch (e: Throwable) {
+            Log.e("ShizukuUtil", "Failed to execute Shizuku command: $command", e)
             null
-        )
-        process.waitFor()
-        return process
+        }
     }
 }

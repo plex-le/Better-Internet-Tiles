@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.nfc.NfcManager
@@ -69,9 +70,8 @@ fun getDataEnabled(context: Context): Boolean {
 }
 
 fun getWifiEnabled(context: Context): Boolean {
-
-    return (context.getSystemService(Context.WIFI_SERVICE) as? WifiManager)
-        ?.isWifiEnabled ?: false
+    val wm = (context.getSystemService(Context.WIFI_SERVICE) as? WifiManager) ?: return false
+    return wm.isWifiEnabled || wm.wifiState == WifiManager.WIFI_STATE_ENABLING
 }
 
 fun getNFCEnabled(context: Context): Boolean {
@@ -95,24 +95,96 @@ fun getAirplaneModeEnabled(context: Context): Boolean {
     ) != 0
 }
 
+fun checkIsWifiConnected(context: Context): Boolean {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+    val activeNet = cm.activeNetwork
+    if (activeNet != null) {
+        val caps = cm.getNetworkCapabilities(activeNet)
+        if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return true
+        }
+    }
+    for (net in cm.allNetworks) {
+        val caps = cm.getNetworkCapabilities(net)
+        if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return true
+        }
+    }
+    return false
+}
+
 fun getConnectedWifiSSID(
     context: Context,
     callback: ((String?) -> Unit)
 ) {
+    // 1. Try directly via ConnectivityManager / WifiInfo (instant, 0ms, zero overhead)
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    cm?.activeNetwork?.let { network ->
+        val caps = cm.getNetworkCapabilities(network)
+        if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            val wifiInfo = caps.transportInfo as? WifiInfo
+            val ssid = wifiInfo?.ssid?.trim('"')
+            if (!ssid.isNullOrEmpty() && ssid != "<unknown ssid>") {
+                callback(ssid)
+                return
+            }
+        }
+    }
 
     if (hasShellAccess(context)) {
-        executeShellCommandAsync(
-            "dumpsys netstats | grep -E 'iface=wlan.*(networkId|wifiNetworkKey)'",
-            context = context
-        ) {
-            val pattern = "(?<=(networkId|wifiNetworkKey)=\").*?(?=\")".toRegex()
-            it?.out?.forEach { wifiString ->
-                pattern.find(wifiString)?.let { matchResult ->
-                    callback(matchResult.value)
+        // 2. Try fast shell command `cmd wifi status` (~10ms, active connected SSID)
+        executeShellCommandAsync("cmd wifi status", context) { result ->
+            val out = result?.out?.joinToString("\n") ?: ""
+            val connectedPattern = """Wifi is connected to "([^"]+)"""".toRegex()
+            val match = connectedPattern.find(out)
+            if (match != null && match.groupValues.size > 1) {
+                val ssid = match.groupValues[1]
+                if (ssid.isNotEmpty() && ssid != "<unknown ssid>") {
+                    callback(ssid)
                     return@executeShellCommandAsync
                 }
             }
-            callback(null)
+
+            val infoPattern = """WifiInfo:.*?\bSSID:\s*"([^"]+)"""".toRegex()
+            val infoMatch = infoPattern.find(out)
+            if (infoMatch != null && infoMatch.groupValues.size > 1) {
+                val ssid = infoMatch.groupValues[1]
+                if (ssid.isNotEmpty() && ssid != "<unknown ssid>") {
+                    callback(ssid)
+                    return@executeShellCommandAsync
+                }
+            }
+
+            // 3. Fallback: dumpsys wifi
+            executeShellCommandAsync("dumpsys wifi | grep -i 'mWifiInfo SSID:' | head -n 1", context) { wifiResult ->
+                val wifiOut = wifiResult?.out?.joinToString("\n") ?: ""
+                val dumpMatch = """SSID:\s*"([^"]+)"""".toRegex().find(wifiOut)
+                if (dumpMatch != null && dumpMatch.groupValues.size > 1) {
+                    val ssid = dumpMatch.groupValues[1]
+                    if (ssid.isNotEmpty() && ssid != "<unknown ssid>") {
+                        callback(ssid)
+                        return@executeShellCommandAsync
+                    }
+                }
+
+                // 4. Final fallback: dumpsys netstats
+                executeShellCommandAsync(
+                    "dumpsys netstats | grep -E 'iface=wlan.*(networkId|wifiNetworkKey)'",
+                    context = context
+                ) { netstatsResult ->
+                    val pattern = "(?<=(networkId|wifiNetworkKey)=\").*?(?=\")".toRegex()
+                    netstatsResult?.out?.forEach { wifiString ->
+                        pattern.find(wifiString)?.let { matchResult ->
+                            val s = matchResult.value
+                            if (s.isNotEmpty() && s != "<unknown ssid>") {
+                                callback(s)
+                                return@executeShellCommandAsync
+                            }
+                        }
+                    }
+                    callback(null)
+                }
+            }
         }
     } else {
         callback(null)
@@ -327,28 +399,45 @@ fun executeShellCommand(command: String, context: Context): Shell.Result? {
     return null
 }
 
-private fun executeShizukuCommand(command: String): Shell.Result {
-    val process = ShizukuUtil.executeCommand(command)
-    return object : Shell.Result() {
-        override fun getOut(): MutableList<String> {
-            return process
-                .inputStream.bufferedReader()
-                .use { it.readText() }
-                .split("\n".toRegex())
-                .toMutableList()
-        }
+private fun executeShizukuCommand(command: String): Shell.Result? {
+    return try {
+        val process = ShizukuUtil.executeCommand(command) ?: return null
+        object : Shell.Result() {
+            override fun getOut(): MutableList<String> {
+                return try {
+                    process
+                        .inputStream.bufferedReader()
+                        .use { it.readText() }
+                        .split("\n".toRegex())
+                        .toMutableList()
+                } catch (e: Exception) {
+                    mutableListOf()
+                }
+            }
 
-        override fun getErr(): MutableList<String> {
-            return process
-                .errorStream.bufferedReader()
-                .use { it.readText() }
-                .split("\n".toRegex())
-                .toMutableList()
-        }
+            override fun getErr(): MutableList<String> {
+                return try {
+                    process
+                        .errorStream.bufferedReader()
+                        .use { it.readText() }
+                        .split("\n".toRegex())
+                        .toMutableList()
+                } catch (e: Exception) {
+                    mutableListOf()
+                }
+            }
 
-        override fun getCode(): Int {
-            return process.exitValue()
+            override fun getCode(): Int {
+                return try {
+                    process.exitValue()
+                } catch (e: Exception) {
+                    -1
+                }
+            }
         }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to execute Shizuku command: $command", e)
+        null
     }
 }
 
