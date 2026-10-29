@@ -11,7 +11,7 @@ ext {
 android {
 
     defaultConfig {
-        applicationId "be.casperverswijvelt.unifiedinternetqs.mod"
+        applicationId "be.plexle.unifiedinternetqs"
         targetSdkVersion 35
         compileSdk 35
         minSdkVersion 31
@@ -21,9 +21,23 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        release {
+            if (file("release.jks").exists()) {
+                storeFile file("release.jks")
+                storePassword "android"
+                keyAlias "release"
+                keyPassword "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
+            if (file("release.jks").exists()) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         debug {

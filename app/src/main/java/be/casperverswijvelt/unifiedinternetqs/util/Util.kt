@@ -489,7 +489,8 @@ fun saveTileUsed(instance: TileService) {
 }
 
 fun reportToAnalytics(context: Context) {
-    if (BuildConfig.DEBUG) return
+    // Disabled in custom release build
+    return
     Thread {
         synchronized(Analytics.reportMutex) {
             try {
