@@ -72,8 +72,10 @@ abstract class ReportingTileService: TileService() {
                 Log.w(getTag(), "Failed to start TileSyncService from onStartListening", e)
             }
         }
-        TileSyncService.refreshWifiStatus(applicationContext)
         TileSyncService.addBehaviourListener(tileBehaviour)
+        if (this is WifiTileService || this is InternetTileService) {
+            TileSyncService.refreshWifiStatus(applicationContext, notifyTiles = false)
+        }
         syncTile(tileBehaviour.finalTileState)
     }
 

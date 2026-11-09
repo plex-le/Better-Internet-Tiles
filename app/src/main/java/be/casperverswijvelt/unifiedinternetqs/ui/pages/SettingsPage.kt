@@ -7,6 +7,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -64,6 +65,20 @@ fun BaseSettings(
         ) {
             coroutineScope.launch {
                 dataStore.setRequireUnlock(it)
+            }
+        }
+
+        val taskerGuideToggled by dataStore.getTaskerGuide.collectAsState(initial = true)
+        TogglePreferenceEntry(
+            icon = {
+                Icon(Icons.Outlined.OpenInNew, "tasker_guide")
+            },
+            title = stringResource(R.string.tasker_guide_title),
+            subTitle = stringResource(R.string.tasker_guide_summary),
+            taskerGuideToggled
+        ) {
+            coroutineScope.launch {
+                dataStore.setTaskerGuide(it)
             }
         }
 

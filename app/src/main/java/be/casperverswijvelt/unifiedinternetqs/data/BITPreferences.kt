@@ -43,6 +43,7 @@ class BITPreferences(private val context: Context) {
         private val KEY_SHELL_METHOD = stringPreferencesKey("shell_method")
 
         private val KEY_HIDE_WIFI_SSID = booleanPreferencesKey("hide_ssid")
+        private val KEY_TASKER_GUIDE = booleanPreferencesKey("tasker_guide")
     }
 
     fun loadPreferences() {
@@ -102,6 +103,19 @@ class BITPreferences(private val context: Context) {
     suspend fun getHideWiFiSSID(value: Boolean) {
         context.dataStore.edit {
             it[KEY_HIDE_WIFI_SSID] = value
+        }
+    }
+
+    // Tasker guide
+
+    val getTaskerGuide: Flow<Boolean> = context
+        .dataStore.data.map {
+            it[KEY_TASKER_GUIDE] ?: true
+        }
+
+    suspend fun setTaskerGuide(value: Boolean) {
+        context.dataStore.edit {
+            it[KEY_TASKER_GUIDE] = value
         }
     }
 

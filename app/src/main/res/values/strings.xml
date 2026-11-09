@@ -18,6 +18,10 @@
     <string name="about">About</string>
     <string name="shell_access_not_set_up">Either root or Shizuku is needed to toggle this tile</string>
     <string name="shell_access_required">Shell access required</string>
+    <string name="permission_reminder_channel_name">Permission reminders</string>
+    <string name="permission_reminder_channel_description">Reminders to grant permissions in the app</string>
+    <string name="shizuku_permission_required_title">Shizuku permission required</string>
+    <string name="shizuku_permission_required_desc">Tap to enter the app and authorize permission</string>
     <string name="hide_service_title">Hide me!</string>
     <string name="hide_service_description">This notification ensures the tiles work correctly with Shizuku. Feel free to hide it.</string>
     <string name="toast_foreground_service_error">"Could not start foreground service. Please contact the developer."</string>
@@ -54,6 +58,8 @@
 
     <string name="missing_permissions">Missing permissions</string>
     <string name="missing_permissions_description">Some things might not work as expected. Expand for more info.</string>
+    <string name="tasker_guide_title">Guide to Tasker external access</string>
+    <string name="tasker_guide_summary">Navigate to Tasker settings when Shizuku is missing and external access is disabled</string>
     <string name="shell_access">Shell access</string>
     <string name="shell_access_description">Shell access is needed to enable/disable certain system features. You can use either root or Shizuku to do this.</string>
     <string name="read_phone_state">Read phone state</string>

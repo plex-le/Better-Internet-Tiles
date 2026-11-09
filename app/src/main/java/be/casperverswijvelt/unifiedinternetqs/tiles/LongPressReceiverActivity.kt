@@ -3,6 +3,7 @@ package be.casperverswijvelt.unifiedinternetqs.tiles
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import be.casperverswijvelt.unifiedinternetqs.util.getDataEnabled
@@ -13,8 +14,12 @@ class LongPressReceiverActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val qsTile: ComponentName? =
+        val qsTile: ComponentName? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent?.getParcelableExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName::class.java)
+        } else {
+            @Suppress("DEPRECATION")
             intent?.getParcelableExtra(Intent.EXTRA_COMPONENT_NAME)
+        }
 
         val intent = Intent(
             // TODO: use 'onLongClickIntentAction' property on TileBehaviour
@@ -49,8 +54,11 @@ class LongPressReceiverActivity : Activity() {
                 }
                 else -> Settings.ACTION_WIRELESS_SETTINGS
             }
-        )
+        ).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
 
         startActivity(intent)
+        finish()
     }
 }

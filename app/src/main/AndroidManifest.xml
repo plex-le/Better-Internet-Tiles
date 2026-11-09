@@ -12,6 +12,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="net.dinglisch.android.tasker.PERMISSION_RUN_TASKS" />
+
+    <queries>
+        <package android:name="net.dinglisch.android.taskerm" />
+        <package android:name="net.dinglisch.android.tasker" />
+        <provider android:authorities="net.dinglisch.android.tasker" />
+    </queries>
 
     <!-- Make sure AD_ID permission is not added by dependencies -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />

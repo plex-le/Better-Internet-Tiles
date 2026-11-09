@@ -26,6 +26,10 @@
     <string name="settings">設定</string>
     <string name="about">關於</string>
     <string name="shell_access_not_set_up">需要 Shizuku 或 Root 權限才能切換方塊</string>
+    <string name="permission_reminder_channel_name">權限提醒</string>
+    <string name="permission_reminder_channel_description">提醒在應用程式中授予所需權限</string>
+    <string name="shizuku_permission_required_title">缺少 Shizuku 權限</string>
+    <string name="shizuku_permission_required_desc">點擊進入應用程式以授予權限</string>
     <string name="shell_access_required">需要存取殼層</string>
     <string name="hide_service_title">將我藏起來！</string>
     <string name="toast_foreground_service_error">無法啟動前景服務，請聯絡開發人員。</string>
@@ -73,4 +77,6 @@
     </plurals>
     <string name="allow_root_access_description">請前往您的 Root 管理介面並授予 Better Internet Tiles 存取權限 (例如 Magisk)</string>
     <string name="allow_root_access">允許存取 Root</string>
+    <string name="tasker_guide_title">Tasker 外部存取引導</string>
+    <string name="tasker_guide_summary">當未授權 Shizuku 且 Tasker 未開啟外部存取時，跳轉到 Tasker 設定頁面</string>
 </resources>

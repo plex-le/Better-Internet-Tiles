@@ -13,6 +13,10 @@
     <string name="xda_title">XDA 开发者主题</string>
     <string name="settings">设置</string>
     <string name="shell_access_required">需要访问Shell</string>
+    <string name="permission_reminder_channel_name">权限提醒</string>
+    <string name="permission_reminder_channel_description">提醒在应用中授予所需权限</string>
+    <string name="shizuku_permission_required_title">缺少 Shizuku 权限</string>
+    <string name="shizuku_permission_required_desc">点击进入应用以授予权限</string>
     <string name="hide_service_title">隐藏我！</string>
     <string name="toast_foreground_service_error">无法启动前台服务。请联系开发者。</string>
     <string name="hide_service_description">这个通知能确保磁贴与Shizuku的正常工作。可以随意隐藏它。</string>
@@ -26,4 +30,6 @@
     <string name="restart_app_summary">如果出现问题请尝试重启应用。</string>
     <string name="about">关于</string>
     <string name="internet">互联网</string>
+    <string name="tasker_guide_title">Tasker 外部访问引导</string>
+    <string name="tasker_guide_summary">当未授权 Shizuku 且 Tasker 未开启外部访问时，跳转到 Tasker 设置页面</string>
 </resources>

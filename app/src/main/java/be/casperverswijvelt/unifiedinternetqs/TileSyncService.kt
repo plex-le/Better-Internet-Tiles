@@ -136,13 +136,19 @@ class TileSyncService: Service() {
         private val behaviourListeners = arrayListOf<TileBehaviour>()
 
         fun addBehaviourListener(tileBehaviour: TileBehaviour) {
-            behaviourListeners.add(tileBehaviour)
+            synchronized(behaviourListeners) {
+                if (!behaviourListeners.contains(tileBehaviour)) {
+                    behaviourListeners.add(tileBehaviour)
+                }
+            }
         }
         fun removeBehaviourListener(tileBehaviour: TileBehaviour) {
-            behaviourListeners.remove(tileBehaviour)
+            synchronized(behaviourListeners) {
+                behaviourListeners.remove(tileBehaviour)
+            }
         }
 
-        fun refreshWifiStatus(context: Context) {
+        fun refreshWifiStatus(context: Context, notifyTiles: Boolean = true) {
             val isEnabled = getWifiEnabled(context)
             val isConnected = isEnabled && checkIsWifiConnected(context)
 
@@ -158,14 +164,24 @@ class TileSyncService: Service() {
             if (isEnabled && isConnected) {
                 getConnectedWifiSSID(context) { ssid ->
                     wifiSSID = ssid
-                    instance?.updateWifiTile()
-                    instance?.updateInternetTile()
+                    if (notifyTiles) {
+                        instance?.updateWifiTile()
+                        instance?.updateInternetTile()
+                    } else {
+                        instance?.requestTileBehaviourUpdate(WifiTileBehaviour::class.java)
+                        instance?.requestTileBehaviourUpdate(InternetTileBehaviour::class.java)
+                    }
                 }
             } else {
                 wifiSSID = null
                 latestAvailableWifiNetwork = null
-                instance?.updateWifiTile()
-                instance?.updateInternetTile()
+                if (notifyTiles) {
+                    instance?.updateWifiTile()
+                    instance?.updateInternetTile()
+                } else {
+                    instance?.requestTileBehaviourUpdate(WifiTileBehaviour::class.java)
+                    instance?.requestTileBehaviourUpdate(InternetTileBehaviour::class.java)
+                }
             }
         }
     }
@@ -379,33 +395,51 @@ class TileSyncService: Service() {
         updateBluetoothTile()
     }
 
+    private fun isTileListening(cls: Class<out TileBehaviour>): Boolean {
+        return synchronized(behaviourListeners) {
+            behaviourListeners.any { it.javaClass == cls }
+        }
+    }
+
     private fun updateWifiTile() {
-        requestListeningState(WifiTileService::class.java)
+        if (!isTileListening(WifiTileBehaviour::class.java)) {
+            requestListeningState(WifiTileService::class.java)
+        }
         requestTileBehaviourUpdate(WifiTileBehaviour::class.java)
     }
 
     private fun updateMobileDataTile() {
-        requestListeningState(MobileDataTileService::class.java)
+        if (!isTileListening(MobileDataTileBehaviour::class.java)) {
+            requestListeningState(MobileDataTileService::class.java)
+        }
         requestTileBehaviourUpdate(MobileDataTileBehaviour::class.java)
     }
 
     private fun updateInternetTile () {
-        requestListeningState(InternetTileService::class.java)
+        if (!isTileListening(InternetTileBehaviour::class.java)) {
+            requestListeningState(InternetTileService::class.java)
+        }
         requestTileBehaviourUpdate(InternetTileBehaviour::class.java)
     }
 
     private fun updateNFCTile() {
-        requestListeningState(NFCTileService::class.java)
+        if (!isTileListening(NFCTileBehaviour::class.java)) {
+            requestListeningState(NFCTileService::class.java)
+        }
         requestTileBehaviourUpdate(NFCTileBehaviour::class.java)
     }
 
     private fun updateAirplaneModeTile() {
-        requestListeningState(AirplaneModeTileService::class.java)
+        if (!isTileListening(AirplaneModeTileBehaviour::class.java)) {
+            requestListeningState(AirplaneModeTileService::class.java)
+        }
         requestTileBehaviourUpdate(AirplaneModeTileBehaviour::class.java)
     }
 
     private fun updateBluetoothTile() {
-        requestListeningState(BluetoothTileService::class.java)
+        if (!isTileListening(BluetoothTileBehaviour::class.java)) {
+            requestListeningState(BluetoothTileService::class.java)
+        }
         requestTileBehaviourUpdate(BluetoothTileBehaviour::class.java)
     }
 
@@ -417,8 +451,10 @@ class TileSyncService: Service() {
     }
 
     private fun <T>requestTileBehaviourUpdate(cls: Class<T>) {
-        // Clone list before iterating to avoid ConcurrentModificationException
-        (behaviourListeners.clone() as List<TileBehaviour>).forEach {
+        val listeners = synchronized(behaviourListeners) {
+            ArrayList(behaviourListeners)
+        }
+        listeners.forEach {
             if (it.javaClass == cls) it.updateTile()
         }
     }
