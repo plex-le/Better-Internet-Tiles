@@ -79,4 +79,8 @@
     <string name="allow_root_access">允許存取 Root</string>
     <string name="tasker_guide_title">Tasker 外部存取引導</string>
     <string name="tasker_guide_summary">當未授權 Shizuku 且 Tasker 未開啟外部存取時，跳轉到 Tasker 設定頁面</string>
+    <string name="check_updates">檢查更新</string>
+    <string name="check_updates_summary">前往 GitHub 查看最新版本</string>
+    <string name="credits_title">致謝原作者</string>
+    <string name="credits_summary">基於 Casper Verswijvelt 的開源專案 (Unified-Internet-QS)</string>
 </resources>

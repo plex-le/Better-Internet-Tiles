@@ -32,4 +32,8 @@
     <string name="internet">互联网</string>
     <string name="tasker_guide_title">Tasker 外部访问引导</string>
     <string name="tasker_guide_summary">当未授权 Shizuku 且 Tasker 未开启外部访问时，跳转到 Tasker 设置页面</string>
+    <string name="check_updates">检查更新</string>
+    <string name="check_updates_summary">前往 GitHub 查看最新版本</string>
+    <string name="credits_title">致谢原作者</string>
+    <string name="credits_summary">基于 Casper Verswijvelt 的开源项目 (Unified-Internet-QS)</string>
 </resources>

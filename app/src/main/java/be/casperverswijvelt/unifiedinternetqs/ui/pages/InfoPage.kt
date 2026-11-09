@@ -19,8 +19,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import be.casperverswijvelt.unifiedinternetqs.BuildConfig
 import be.casperverswijvelt.unifiedinternetqs.R
-import be.casperverswijvelt.unifiedinternetqs.ui.components.PreferenceEntry
 import be.casperverswijvelt.unifiedinternetqs.ui.components.LargeTopBarPage
+import be.casperverswijvelt.unifiedinternetqs.ui.components.PreferenceEntry
 import com.jakewharton.processphoenix.ProcessPhoenix
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -37,39 +37,42 @@ fun InfoPage() {
 
         PreferenceEntry(
             icon = {
-                DrawableIcon(R.drawable.feedback)
-            },
-            title = stringResource(R.string.feedback_title)
-        ) {
-            uriHandler.openUri("https://forms.gle/mU7oiPbQvro5owWf9")
-        }
-
-        PreferenceEntry(
-            icon = {
                 DrawableIcon(R.drawable.github)
             },
-            title = stringResource(R.string.github_title)
+            title = stringResource(R.string.github_title),
+            subTitle = "plex-le/Better-Internet-Tiles"
         ) {
-            uriHandler.openUri("https://github.com/CasperVerswijvelt/Better-Internet-Tiles")
+            uriHandler.openUri("https://github.com/plex-le/Better-Internet-Tiles")
         }
 
         PreferenceEntry(
             icon = {
-                DrawableIcon(R.drawable.xda)
+                DrawableIcon(R.drawable.ic_outline_info_24)
             },
-            title = stringResource(R.string.xda_title)
+            title = stringResource(R.string.check_updates),
+            subTitle = stringResource(R.string.check_updates_summary)
         ) {
-            uriHandler.openUri("https://forum.xda-developers.com/t/better-internet-tiles-bring-back-wi-fi-and-mobile-data-toggles-non-root.4373925/")
+            uriHandler.openUri("https://github.com/plex-le/Better-Internet-Tiles/releases")
         }
 
         PreferenceEntry(
             icon = {
-                DrawableIcon(R.drawable.baseline_translate_24)
+                DrawableIcon(R.drawable.feedback)
             },
-            title = stringResource(R.string.weblate),
-            subTitle = stringResource(R.string.help_translate)
+            title = stringResource(R.string.feedback_title),
+            subTitle = "GitHub Issues"
         ) {
-            uriHandler.openUri("https://hosted.weblate.org/projects/better-internet-tiles/translations/")
+            uriHandler.openUri("https://github.com/plex-le/Better-Internet-Tiles/issues")
+        }
+
+        PreferenceEntry(
+            icon = {
+                DrawableIcon(R.drawable.ic_baseline_public_24)
+            },
+            title = stringResource(R.string.credits_title),
+            subTitle = stringResource(R.string.credits_summary)
+        ) {
+            uriHandler.openUri("https://github.com/CasperVerswijvelt/Unified-Internet-QS")
         }
 
         PreferenceEntry(
@@ -80,16 +83,6 @@ fun InfoPage() {
             subTitle = stringResource(R.string.restart_app_summary)
         ) {
             ProcessPhoenix.triggerRebirth(context)
-        }
-
-        PreferenceEntry(
-            icon = {
-                DrawableIcon(R.drawable.donate)
-            },
-            title = stringResource(R.string.donate),
-            subTitle = stringResource(R.string.donate_summary)
-        ) {
-            uriHandler.openUri("https://ko-fi.com/casperverswijvelt")
         }
 
         PreferenceEntry(

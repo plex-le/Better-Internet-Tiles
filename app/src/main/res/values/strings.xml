@@ -86,4 +86,8 @@
     <string name="hide_wifi_name_description">Setting applies to both Wi-Fi and Internet tiles</string>
     <string name="behaviour">Behaviour</string>
     <string name="look">Look</string>
+    <string name="check_updates">Check for updates</string>
+    <string name="check_updates_summary">View latest releases on GitHub</string>
+    <string name="credits_title">Credits</string>
+    <string name="credits_summary">Original app by Casper Verswijvelt (Unified-Internet-QS)</string>
 </resources>
