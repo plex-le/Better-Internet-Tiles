@@ -21,8 +21,6 @@ import be.casperverswijvelt.unifiedinternetqs.util.getDataEnabled
 import be.casperverswijvelt.unifiedinternetqs.util.getWifiEnabled
 import be.casperverswijvelt.unifiedinternetqs.util.getWifiIcon
 import kotlinx.coroutines.Runnable
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 class InternetTileBehaviour(
     context: Context,
@@ -66,9 +64,9 @@ class InternetTileBehaviour(
                         TileSyncService.isTurningOffWifi = false
                     }
 
-                    val showSSID = runBlocking {
-                        !preferences.getHideWiFiSSID.first()
-                    } && TileSyncService.wifiSSID?.isNotEmpty() == true
+                    // Read once into a local: the field may be cleared from other threads
+                    val ssid = TileSyncService.wifiSSID
+                    val showSSID = !preferences.getHideWiFiSSIDSync() && ssid?.isNotEmpty() == true
 
                     tile.state = Tile.STATE_ACTIVE
                     tile.icon = if (TileSyncService.wifiConnected)
@@ -78,7 +76,7 @@ class InternetTileBehaviour(
 
                     tile.label = when {
                         TileSyncService.isTurningOnWifi -> resources.getString(R.string.turning_on)
-                        TileSyncService.wifiConnected && showSSID -> TileSyncService.wifiSSID!!
+                        TileSyncService.wifiConnected && showSSID -> ssid ?: resources.getString(R.string.connected)
                         TileSyncService.wifiConnected -> resources.getString(R.string.connected)
                         else -> resources.getString(R.string.on)
                     }

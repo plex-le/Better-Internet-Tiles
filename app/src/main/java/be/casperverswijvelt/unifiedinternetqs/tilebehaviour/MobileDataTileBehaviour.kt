@@ -109,12 +109,14 @@ class MobileDataTileBehaviour(
             TileSyncService.isTurningOnData = false
             TileSyncService.isTurningOffData = true
             executeShellCommandAsync("svc data disable", context) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOffData = false
                 updateTile()
             }
         } else {
             TileSyncService.isTurningOnData = true
             TileSyncService.isTurningOffData = false
             executeShellCommandAsync("svc data enable", context) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOnData = false
                 updateTile()
             }
         }

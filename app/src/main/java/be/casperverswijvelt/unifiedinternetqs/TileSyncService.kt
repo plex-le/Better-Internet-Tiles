@@ -60,9 +60,9 @@ class TileSyncService: Service() {
         var wifiConnected = false
         var wifiSSID: String? = null
 
-        var isTurningOnData = false
-        var isTurningOffData = false
-        var serviceState: ServiceState? = null
+        @Volatile var isTurningOnData = false
+        @Volatile var isTurningOffData = false
+        @Volatile var serviceState: ServiceState? = null
 
         private val handler = Handler(Looper.getMainLooper())
         private const val TRANSITION_TIMEOUT_MS = 6000L
@@ -119,21 +119,69 @@ class TileSyncService: Service() {
                 }
             }
 
-        var isTurningOnNFC = false
-        var isTurningOffNFC = false
+        @Volatile var isTurningOnNFC = false
+        @Volatile var isTurningOffNFC = false
 
-        var isTurningOnAirplaneMode = false
-        var isTurningOffAirplaneMode = false
+        @Volatile var isTurningOnAirplaneMode = false
+        @Volatile var isTurningOffAirplaneMode = false
 
-        var isTurningOnBluetooth = false
-        var isTurningOffBluetooth = false
+        @Volatile var isTurningOnBluetooth = false
+        @Volatile var isTurningOffBluetooth = false
 
-        val bluetoothConnectionState: MutableMap<String, Int> = mutableMapOf()
-        val bluetoothBatteryLevel: MutableMap<String, Int> = mutableMapOf()
+        val bluetoothConnectionState: MutableMap<String, Int> =
+            java.util.concurrent.ConcurrentHashMap()
+        val bluetoothBatteryLevel: MutableMap<String, Int> =
+            java.util.concurrent.ConcurrentHashMap()
 
-        var bluetoothProfile: BluetoothProfile? = null
+        @Volatile var bluetoothProfile: BluetoothProfile? = null
 
         private val behaviourListeners = arrayListOf<TileBehaviour>()
+
+        // Behaviour classes whose Quick Settings tile is currently in listening state
+        //  (separate from behaviourListeners, which also contains the in-app preview tiles)
+        private val qsListeningBehaviours =
+            java.util.Collections.synchronizedSet(mutableSetOf<Class<*>>())
+
+        fun setQsListening(behaviourClass: Class<*>, listening: Boolean) {
+            if (listening) {
+                qsListeningBehaviours.add(behaviourClass)
+            } else {
+                qsListeningBehaviours.remove(behaviourClass)
+            }
+        }
+
+        // SSID retrieval is expensive (may spawn shell commands), so it is throttled and
+        //  never runs concurrently.
+        private const val SSID_MIN_INTERVAL_MS = 3000L
+        private val ssidFetchInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+        @Volatile private var lastSsidFetchTime = 0L
+
+        fun fetchWifiSSID(
+            context: Context,
+            force: Boolean = false,
+            onResult: (String?) -> Unit
+        ) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (!force && now - lastSsidFetchTime < SSID_MIN_INTERVAL_MS) {
+                onResult(wifiSSID)
+                return
+            }
+            if (!ssidFetchInFlight.compareAndSet(false, true)) {
+                onResult(wifiSSID)
+                return
+            }
+            lastSsidFetchTime = now
+            try {
+                getConnectedWifiSSID(context) { ssid ->
+                    ssidFetchInFlight.set(false)
+                    onResult(ssid)
+                }
+            } catch (e: Throwable) {
+                ssidFetchInFlight.set(false)
+                Log.w(TAG, "Failed to fetch Wi-Fi SSID", e)
+                onResult(null)
+            }
+        }
 
         fun addBehaviourListener(tileBehaviour: TileBehaviour) {
             synchronized(behaviourListeners) {
@@ -162,7 +210,7 @@ class TileSyncService: Service() {
 
             wifiConnected = isConnected
             if (isEnabled && isConnected) {
-                getConnectedWifiSSID(context) { ssid ->
+                fetchWifiSSID(context, force = true) { ssid ->
                     wifiSSID = ssid
                     if (notifyTiles) {
                         instance?.updateWifiTile()
@@ -187,6 +235,7 @@ class TileSyncService: Service() {
     }
 
     private val wifiChangeListener: WifiChangeListener = WifiChangeListener { type, network ->
+        var forceSsid = false
         when(type) {
             NetworkChangeType.NETWORK_LOST -> {
                 wifiConnected = checkIsWifiConnected(applicationContext)
@@ -196,6 +245,8 @@ class TileSyncService: Service() {
                 }
             }
             NetworkChangeType.NETWORK_AVAILABLE -> {
+                // Only a different network (or a first connection) warrants a forced SSID lookup
+                if (network != latestAvailableWifiNetwork) forceSsid = true
                 latestAvailableWifiNetwork = network
                 wifiConnected = true
                 if (isTurningOnWifi) {
@@ -220,7 +271,7 @@ class TileSyncService: Service() {
         if (wifiConnected) {
             updateWifiTile()
             updateInternetTile()
-            getConnectedWifiSSID(applicationContext) { setSSID(it) }
+            fetchWifiSSID(applicationContext, forceSsid) { setSSID(it) }
         } else {
             setSSID(null)
         }
@@ -256,7 +307,13 @@ class TileSyncService: Service() {
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.let {
-                val device = it.extras?.get(BluetoothDevice.EXTRA_DEVICE) as? BluetoothDevice
+                val device: BluetoothDevice? =
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        it.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        it.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
                 when (it.action) {
                     BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED -> {
                         val state = it.getIntExtra(BluetoothAdapter.EXTRA_CONNECTION_STATE, -1)
@@ -300,7 +357,6 @@ class TileSyncService: Service() {
             NotificationManager.IMPORTANCE_DEFAULT
         )
         mNotificationManager.createNotificationChannel(channel)
-        Notification.Builder(this, TileApplication.CHANNEL_ID)
         startForeground(1, notification)
         return START_NOT_STICKY
     }
@@ -315,7 +371,7 @@ class TileSyncService: Service() {
         wifiConnected = checkIsWifiConnected(applicationContext)
         wifiChangeListener.startListening(applicationContext)
         if (wifiConnected) {
-            getConnectedWifiSSID(applicationContext) { ssid ->
+            fetchWifiSSID(applicationContext, force = true) { ssid ->
                 wifiSSID = ssid
                 updateWifiTile()
                 updateInternetTile()
@@ -383,6 +439,16 @@ class TileSyncService: Service() {
         unregisterReceiver(nfcReceiver)
         unregisterReceiver(bluetoothReceiver)
 
+        bluetoothProfile?.let {
+            try {
+                (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
+                    ?.adapter?.closeProfileProxy(BluetoothProfile.HEADSET, it)
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to close Bluetooth profile proxy", e)
+            }
+        }
+        bluetoothProfile = null
+
         updateAllTiles()
     }
 
@@ -396,9 +462,7 @@ class TileSyncService: Service() {
     }
 
     private fun isTileListening(cls: Class<out TileBehaviour>): Boolean {
-        return synchronized(behaviourListeners) {
-            behaviourListeners.any { it.javaClass == cls }
-        }
+        return qsListeningBehaviours.contains(cls)
     }
 
     private fun updateWifiTile() {

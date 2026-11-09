@@ -10,6 +10,8 @@ import android.content.Intent
 import android.content.res.Resources
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -22,11 +24,8 @@ import be.casperverswijvelt.unifiedinternetqs.settings.settings.requireUnlockSet
 import be.casperverswijvelt.unifiedinternetqs.tiles.LongPressReceiverActivity
 import be.casperverswijvelt.unifiedinternetqs.ui.MainActivity
 import be.casperverswijvelt.unifiedinternetqs.util.AlertDialogData
-import be.casperverswijvelt.unifiedinternetqs.util.getShellAccessRequiredDialog
 import be.casperverswijvelt.unifiedinternetqs.util.hasShellAccess
 import kotlinx.coroutines.Runnable
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 abstract class TileBehaviour(
     protected val context: Context,
@@ -37,7 +36,9 @@ abstract class TileBehaviour(
     protected val preferences = BITPreferences(context)
     protected val resources: Resources = context.resources
 
-    private val updateTileListeners = arrayListOf<(TileState) -> Unit>()
+    private val updateTileListeners =
+        java.util.concurrent.CopyOnWriteArrayList<(TileState) -> Unit>()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     abstract val type: TileType
     abstract val tileName: String
@@ -137,18 +138,25 @@ abstract class TileBehaviour(
     }
 
     val requiresUnlock: Boolean
-        get() = runBlocking {
-            when(preferences.getRequireUnlock(type).first()) {
-                FollowOption.FOLLOW -> {
-                    preferences.getRequireUnlock.first()
-                }
-                FollowOption.YES -> true
-                FollowOption.NO -> false
-            }
+        get() = when (preferences.getRequireUnlockSync(type)) {
+            FollowOption.FOLLOW -> preferences.getRequireUnlockSync()
+            FollowOption.YES -> true
+            FollowOption.NO -> false
         }
 
     fun updateTile() {
-        updateTileListeners.forEach { it(finalTileState) }
+        // Tile state is read and applied on the main thread: updates can be triggered from
+        //  shell executor threads and network callback threads.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            dispatchTileUpdate()
+        } else {
+            mainHandler.post { dispatchTileUpdate() }
+        }
+    }
+
+    private fun dispatchTileUpdate() {
+        val state = finalTileState
+        updateTileListeners.forEach { it(state) }
     }
 
     fun addUpdateTileListeners(listener: (TileState) -> Unit) {

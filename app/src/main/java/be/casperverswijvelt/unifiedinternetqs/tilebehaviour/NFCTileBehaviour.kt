@@ -87,12 +87,14 @@ class NFCTileBehaviour(
             TileSyncService.isTurningOnNFC = false
             TileSyncService.isTurningOffNFC = true
             executeShellCommandAsync("svc nfc disable", context) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOffNFC = false
                 updateTile()
             }
         } else {
             TileSyncService.isTurningOnNFC = true
             TileSyncService.isTurningOffNFC = false
             executeShellCommandAsync("svc nfc enable", context) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOnNFC = false
                 updateTile()
             }
         }

@@ -58,7 +58,16 @@ class LongPressReceiverActivity : Activity() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
 
-        startActivity(intent)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback if specific settings page is missing on this ROM
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                })
+            } catch (_: Exception) {}
+        }
         finish()
     }
 }

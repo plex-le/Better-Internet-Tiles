@@ -135,12 +135,14 @@ class BluetoothTileBehaviour(
             TileSyncService.isTurningOnBluetooth = false
             TileSyncService.isTurningOffBluetooth = true
             executeShellCommandAsync("svc bluetooth disable", context) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOffBluetooth = false
                 updateTile()
             }
         } else {
             TileSyncService.isTurningOnBluetooth = true
             TileSyncService.isTurningOffBluetooth = false
             executeShellCommandAsync("svc bluetooth enable", context) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOnBluetooth = false
                 updateTile()
             }
         }

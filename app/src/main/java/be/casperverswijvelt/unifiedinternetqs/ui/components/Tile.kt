@@ -65,7 +65,11 @@ fun LiveTile(
             tileBehaviour.onClick()
         },
         onLongClick = {
-            context.startActivity(Intent(tileBehaviour.onLongClickIntentAction))
+            try {
+                context.startActivity(Intent(tileBehaviour.onLongClickIntentAction))
+            } catch (e: Exception) {
+                // Ignore if target settings activity does not exist on this device
+            }
         }
     )
 

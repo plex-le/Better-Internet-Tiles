@@ -10,14 +10,18 @@ import android.telephony.SignalStrength
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
+import android.util.Log
 
 class CellularChangeListener(private val callback: (type: NetworkChangeType?, args: List<Any?>?) -> Unit) {
 
     companion object {
+        private const val TAG = "CellularChangeListener"
+        @Volatile
         var currentTelephonyDisplayInfo: TelephonyDisplayInfo? = null
     }
 
     private var isListening = false
+    private var telephonyCallbackRegistered = false
 
     private val mobileNetworkCallback =
         object : ConnectivityManager.NetworkCallback() {
@@ -52,6 +56,8 @@ class CellularChangeListener(private val callback: (type: NetworkChangeType?, ar
 
     fun startListening(context: Context) {
 
+        if (isListening) return
+
         // Cellular network state
         val cm =
             context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -60,13 +66,20 @@ class CellularChangeListener(private val callback: (type: NetworkChangeType?, ar
             .build()
         cm.registerNetworkCallback(networkRequest, mobileNetworkCallback)
 
-        // Mobile signal strength listener
-        val tm =
-            context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        tm.registerTelephonyCallback(
-            context.mainExecutor,
-            telephonyCallback
-        )
+        // Mobile signal strength listener. Registering this callback requires the
+        //  READ_PHONE_STATE permission, so it must not take the whole service down when
+        //  the permission has not been granted.
+        try {
+            val tm =
+                context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            tm.registerTelephonyCallback(
+                context.mainExecutor,
+                telephonyCallback
+            )
+            telephonyCallbackRegistered = true
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Cannot register telephony callback, missing permission", e)
+        }
 
         isListening = true
     }
@@ -83,9 +96,12 @@ class CellularChangeListener(private val callback: (type: NetworkChangeType?, ar
             cm.unregisterNetworkCallback(mobileNetworkCallback)
 
             // Mobile signal strength listener
-            val tm =
-                context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-            tm.unregisterTelephonyCallback(telephonyCallback)
+            if (telephonyCallbackRegistered) {
+                val tm =
+                    context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+                tm.unregisterTelephonyCallback(telephonyCallback)
+                telephonyCallbackRegistered = false
+            }
 
             currentTelephonyDisplayInfo = null
         }

@@ -23,8 +23,6 @@ import be.casperverswijvelt.unifiedinternetqs.util.getWifiEnabled
 import be.casperverswijvelt.unifiedinternetqs.util.getWifiIcon
 import be.casperverswijvelt.unifiedinternetqs.util.hasShellAccess
 import kotlinx.coroutines.Runnable
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import java.util.Random
 
 class WifiTileBehaviour(
@@ -71,12 +69,11 @@ class WifiTileBehaviour(
                     TileSyncService.isTurningOffWifi = false
                 }
 
-                val showSSID = runBlocking {
-                    !preferences.getHideWiFiSSID.first()
-                } && TileSyncService.wifiSSID?.isNotEmpty() == true
+                val ssid = TileSyncService.wifiSSID
+                val showSSID = !preferences.getHideWiFiSSIDSync() && ssid?.isNotEmpty() == true
 
                 tile.label = when {
-                    TileSyncService.wifiConnected && showSSID -> TileSyncService.wifiSSID
+                    TileSyncService.wifiConnected && showSSID -> ssid
                     else -> null
                 } ?: resources.getString(R.string.wifi)
                 tile.state = Tile.STATE_ACTIVE
@@ -137,7 +134,7 @@ class WifiTileBehaviour(
                     }
                     return
                 } else {
-                    val shouldGuide = runBlocking { preferences.getTaskerGuide.first() }
+                    val shouldGuide = preferences.getTaskerGuideSync()
                     Log.d(TAG, "onClick: shouldGuide=$shouldGuide")
                     if (shouldGuide) {
                         openTaskerSettingsPage()

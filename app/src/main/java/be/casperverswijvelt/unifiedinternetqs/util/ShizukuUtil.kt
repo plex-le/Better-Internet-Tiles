@@ -37,6 +37,8 @@ object ShizukuUtil {
      *
      * @param callback invoked when the permission grant result is received.
      */
+    private const val PERMISSION_REQUEST_CODE = 69101
+
     fun requestShizukuPermission(callback: (granted: Boolean) -> Unit) {
         if (Shizuku.pingBinder()) {
             Shizuku.addRequestPermissionResultListener(object :
@@ -45,31 +47,34 @@ object ShizukuUtil {
                     requestCode: Int,
                     grantResult: Int
                 ) {
+                    if (requestCode != PERMISSION_REQUEST_CODE) return
                     Shizuku.removeRequestPermissionResultListener(this)
                     callback(grantResult == PackageManager.PERMISSION_GRANTED)
                 }
             })
-            Shizuku.requestPermission(69101)
+            Shizuku.requestPermission(PERMISSION_REQUEST_CODE)
         } else {
             callback(false)
         }
 
     }
 
+    /**
+     * Starts a process through Shizuku. The caller is responsible for consuming the output
+     * streams and waiting for the process, see [be.casperverswijvelt.unifiedinternetqs.util.executeShellCommand].
+     */
     fun executeCommand(command: String): Process? {
         return try {
             val args = if (command.contains("|") || command.contains(">") || command.startsWith("sh -c")) {
                 arrayOf("sh", "-c", command)
             } else {
-                command.split(' ').toTypedArray()
+                command.trim().split(Regex("\\s+")).toTypedArray()
             }
-            val process = Shizuku.newProcess(
+            Shizuku.newProcess(
                 args,
                 null,
                 null
             )
-            process.waitFor()
-            process
         } catch (e: Throwable) {
             Log.e("ShizukuUtil", "Failed to execute Shizuku command: $command", e)
             null

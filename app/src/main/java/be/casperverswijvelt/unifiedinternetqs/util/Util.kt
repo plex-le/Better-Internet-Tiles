@@ -5,15 +5,12 @@ import android.app.AlertDialog
 import android.app.Dialog
 import android.bluetooth.BluetoothManager
 import android.content.Context
-import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.nfc.NfcManager
-import android.os.Build
 import android.provider.Settings
 import android.service.quicksettings.TileService
 import android.telephony.SubscriptionInfo
@@ -22,26 +19,13 @@ import android.telephony.TelephonyDisplayInfo
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.preference.PreferenceManager
-import be.casperverswijvelt.unifiedinternetqs.BuildConfig
 import be.casperverswijvelt.unifiedinternetqs.R
 import be.casperverswijvelt.unifiedinternetqs.data.BITPreferences
 import be.casperverswijvelt.unifiedinternetqs.data.ShellMethod
-import be.casperverswijvelt.unifiedinternetqs.tiles.AirplaneModeTileService
-import be.casperverswijvelt.unifiedinternetqs.tiles.BluetoothTileService
-import be.casperverswijvelt.unifiedinternetqs.tiles.InternetTileService
-import be.casperverswijvelt.unifiedinternetqs.tiles.MobileDataTileService
-import be.casperverswijvelt.unifiedinternetqs.tiles.NFCTileService
-import be.casperverswijvelt.unifiedinternetqs.tiles.WifiTileService
-import be.casperverswijvelt.unifiedinternetqs.ui.MainActivity
 import com.topjohnwu.superuser.Shell
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
-import org.json.JSONObject
 import java.lang.reflect.Method
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.Locale
 import java.util.UUID
 
 const val TAG = "Util"
@@ -167,23 +151,7 @@ fun getConnectedWifiSSID(
                     }
                 }
 
-                // 4. Final fallback: dumpsys netstats
-                executeShellCommandAsync(
-                    "dumpsys netstats | grep -E 'iface=wlan.*(networkId|wifiNetworkKey)'",
-                    context = context
-                ) { netstatsResult ->
-                    val pattern = "(?<=(networkId|wifiNetworkKey)=\").*?(?=\")".toRegex()
-                    netstatsResult?.out?.forEach { wifiString ->
-                        pattern.find(wifiString)?.let { matchResult ->
-                            val s = matchResult.value
-                            if (s.isNotEmpty() && s != "<unknown ssid>") {
-                                callback(s)
-                                return@executeShellCommandAsync
-                            }
-                        }
-                    }
-                    callback(null)
-                }
+                callback(null)
             }
         }
     } else {
@@ -329,25 +297,6 @@ private fun getNetworkClassString(networkType: Int): String? {
 
 // Shell access
 
-fun getShellAccessRequiredDialog(context: Context): AlertDialogData {
-
-    val intent = Intent(context, MainActivity::class.java)
-    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-
-    return AlertDialogData(
-        titleResource = R.string.shell_access_required,
-        messageResource = R.string.shell_access_not_set_up,
-        positiveButtonResource = R.string.ok,
-        onPositiveButtonClicked = {
-            if (ShizukuUtil.shizukuAvailable) {
-                ShizukuUtil.requestShizukuPermission { }
-            } else {
-                context.startActivity(intent)
-            }
-        }
-    )
-}
-
 data class AlertDialogData(
     val iconResource: Int? = null,
     val titleResource: Int,
@@ -371,10 +320,7 @@ fun AlertDialogData.toDialog(context: Context): Dialog {
 }
 
 fun executeShellCommand(command: String, context: Context): Shell.Result? {
-    val preferences = BITPreferences(context)
-    val shellMethod = runBlocking {
-         preferences.getShellMethod.first()
-    }
+    val shellMethod = BITPreferences(context).getShellMethodSync()
 
     when (shellMethod) {
         ShellMethod.ROOT -> {
@@ -399,41 +345,65 @@ fun executeShellCommand(command: String, context: Context): Shell.Result? {
     return null
 }
 
+private const val SHIZUKU_COMMAND_TIMEOUT_SECONDS = 10L
+
 private fun executeShizukuCommand(command: String): Shell.Result? {
     return try {
         val process = ShizukuUtil.executeCommand(command) ?: return null
+
+        // Drain stdout and stderr concurrently, otherwise the process can block on a full
+        //  pipe buffer and never exit. The output is cached so Shell.Result can be read
+        //  multiple times.
+        val outLines = mutableListOf<String>()
+        val errLines = mutableListOf<String>()
+        val outThread = Thread {
+            try {
+                outLines.addAll(
+                    process.inputStream.bufferedReader().use { it.readText() }.split("\n")
+                )
+            } catch (e: Exception) {
+                // Ignore, partial output is returned
+            }
+        }
+        val errThread = Thread {
+            try {
+                errLines.addAll(
+                    process.errorStream.bufferedReader().use { it.readText() }.split("\n")
+                )
+            } catch (e: Exception) {
+                // Ignore, partial output is returned
+            }
+        }
+        outThread.start()
+        errThread.start()
+
+        val finished = process.waitFor(
+            SHIZUKU_COMMAND_TIMEOUT_SECONDS,
+            java.util.concurrent.TimeUnit.SECONDS
+        )
+        if (!finished) {
+            Log.w(TAG, "Shizuku command timed out: $command")
+            process.destroy()
+        }
+        outThread.join(1000)
+        errThread.join(1000)
+
+        val exitCode = if (finished) {
+            try {
+                process.exitValue()
+            } catch (e: Exception) {
+                -1
+            }
+        } else {
+            -1
+        }
+
         object : Shell.Result() {
-            override fun getOut(): MutableList<String> {
-                return try {
-                    process
-                        .inputStream.bufferedReader()
-                        .use { it.readText() }
-                        .split("\n".toRegex())
-                        .toMutableList()
-                } catch (e: Exception) {
-                    mutableListOf()
-                }
-            }
+            override fun getOut(): MutableList<String> = outLines
 
-            override fun getErr(): MutableList<String> {
-                return try {
-                    process
-                        .errorStream.bufferedReader()
-                        .use { it.readText() }
-                        .split("\n".toRegex())
-                        .toMutableList()
-                } catch (e: Exception) {
-                    mutableListOf()
-                }
-            }
+            override fun getErr(): MutableList<String> = errLines
 
-            override fun getCode(): Int {
-                return try {
-                    process.exitValue()
-                } catch (e: Exception) {
-                    -1
-                }
-            }
+            override fun getCode(): Int = exitCode
         }
     } catch (e: Exception) {
         Log.e(TAG, "Failed to execute Shizuku command: $command", e)
@@ -457,11 +427,7 @@ fun executeShellCommandAsync(
  * If shell access is detected, the shizuku detection service is automatically stopped
  */
 fun hasShellAccess(context: Context): Boolean {
-
-    val preferences = BITPreferences(context)
-    val shellMethod = runBlocking {
-        preferences.getShellMethod.first()
-    }
+    val shellMethod = BITPreferences(context).getShellMethodSync()
 
     return when (shellMethod) {
         ShellMethod.ROOT -> Shell.isAppGrantedRoot() == true
@@ -472,13 +438,7 @@ fun hasShellAccess(context: Context): Boolean {
     }
 }
 
-// Analytics
-
-class Analytics {
-    companion object {
-        var reportMutex = Object()
-    }
-}
+// Usage tracking
 
 fun saveTileUsed(instance: TileService) {
     // TODO replace with datastore
@@ -488,145 +448,13 @@ fun saveTileUsed(instance: TileService) {
         ?.apply()
 }
 
+/**
+ * Analytics reporting is disabled in this build: no data is collected or sent anywhere.
+ * The function is kept so existing call sites stay valid.
+ */
+@Suppress("UNUSED_PARAMETER")
 fun reportToAnalytics(context: Context) {
-    // Disabled in custom release build
-    return
-    Thread {
-        synchronized(Analytics.reportMutex) {
-            try {
-                val sharedPref = PreferenceManager
-                    .getDefaultSharedPreferences(context)
-                val lastReportTimestampKey = "LAST_REPORT_TIMESTAMP"
-
-                val lastReportTimestamp = sharedPref.getLong(
-                    lastReportTimestampKey,
-                    0
-                )
-                val current = System.currentTimeMillis()
-                val minDiff = hoursToMs(12)
-                val diff = current - lastReportTimestamp
-
-                // Only send analytics data if last sent out report was more
-                //  than 12 hours ago
-                if (diff >= minDiff) {
-
-                    log("Sending Analytics data")
-                    val url =
-                        URL("https://bitanalytics.casperverswijvelt" +
-                                ".be/api/report")
-                    with(url.openConnection() as HttpURLConnection) {
-                        requestMethod = "POST"
-                        doOutput = true
-                        connectTimeout = 10000
-                        readTimeout = 20000
-
-                        // JSON Format
-                        setRequestProperty("Content-Type", "application/json")
-                        setRequestProperty("Accept", "application/json")
-
-                        // Small JSON message containing some basic information
-                        //  to report to analytics. This data is used for
-                        //  informational purpose only.
-                        val data = JSONObject()
-                        val dynamic = JSONObject()
-                        val static = JSONObject()
-                        val tiles = JSONObject()
-
-                        static.put("uuid", getInstallId(context))
-                        static.put("brand", Build.BRAND)
-                        static.put("model", Build.MODEL)
-
-                        dynamic.put("sdk", Build.VERSION.SDK_INT)
-                        dynamic.put("version", BuildConfig.VERSION_CODE)
-                        dynamic.put("lang", Locale.getDefault().language)
-                        dynamic.put("dist", BuildConfig.FLAVOR)
-                        dynamic.put(
-                            "shell",
-                            when {
-                                Shell.isAppGrantedRoot() == true -> "root"
-                                ShizukuUtil.hasShizukuPermission() -> "shizuku"
-                                else -> "none"
-                            }
-                        )
-
-                        tiles.put(
-                            "internet",
-                            wasTileUsedInLastXHours(
-                                InternetTileService::class.java,
-                                sharedPref
-                            )
-                        )
-                        tiles.put(
-                            "data",
-                            wasTileUsedInLastXHours(
-                                MobileDataTileService::class.java,
-                                sharedPref
-                            )
-                        )
-                        tiles.put(
-                            "wifi",
-                            wasTileUsedInLastXHours(
-                                WifiTileService::class.java,
-                                sharedPref
-                            )
-                        )
-                        tiles.put(
-                            "nfc",
-                            wasTileUsedInLastXHours(
-                                NFCTileService::class.java,
-                                sharedPref
-                            )
-                        )
-                        tiles.put(
-                            "airplaneMode",
-                            wasTileUsedInLastXHours(
-                                AirplaneModeTileService::class.java,
-                                sharedPref
-                            )
-                        )
-                        tiles.put(
-                            "bluetooth",
-                            wasTileUsedInLastXHours(
-                                BluetoothTileService::class.java,
-                                sharedPref
-                            )
-                        )
-
-                        dynamic.put("tiles", tiles)
-                        data.put("static", static)
-                        data.put("dynamic", dynamic)
-
-                        val dataString = data
-                            .toString()
-                            .toByteArray(Charsets.UTF_8)
-                        outputStream.write(
-                            dataString,
-                            0,
-                            dataString.size
-                        )
-
-                        log(
-                            "\nSuccessfully sent 'POST' request to URL : $url " +
-                                    "with data ${dataString};" +
-                                    " Response Code: " +
-                                    "$responseCode"
-                        )
-                    }
-
-                    // Save timestamp in shared preferences
-                    sharedPref.edit().putLong(
-                        lastReportTimestampKey,
-                        current
-                    ).apply()
-                } else {
-                    log("Already sent analytics report ${diff/1000/60/60} " +
-                            "hours ago")
-                }
-            } catch (e: Exception) {
-                log("Error sending analytics data: $e")
-            }
-        }
-    }.start()
+    // Intentionally empty
 }
 
 fun getInstallId(context: Context): String = runBlocking {
@@ -639,28 +467,4 @@ fun getInstallId(context: Context): String = runBlocking {
         preferences.setInstallationId(uuid)
         uuid
     }
-}
-
-private fun <T> wasTileUsedInLastXHours(
-    javaClass: Class<T>,
-    sharedPref: SharedPreferences,
-    hours: Int = 12
-): Boolean {
-    val timestamp: Long = try {
-        sharedPref.getLong(javaClass.name, 0)
-    } catch (e: java.lang.Exception) {
-        0
-    }
-    val current = System.currentTimeMillis()
-    val diff = current - timestamp
-    val maxDiff = hoursToMs(hours.toLong())
-    return diff <= maxDiff
-}
-
-private fun hoursToMs(hours: Long): Long {
-    return hours * 60 * 60 * 1000
-}
-
-private fun log(text: String) {
-    Log.d(TAG, text)
 }

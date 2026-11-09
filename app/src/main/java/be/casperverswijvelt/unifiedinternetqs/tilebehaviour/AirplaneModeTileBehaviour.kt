@@ -87,6 +87,7 @@ class AirplaneModeTileBehaviour(
                 "cmd connectivity airplane-mode disable",
                 context
             ) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOffAirplaneMode = false
                 updateTile()
             }
         } else {
@@ -96,6 +97,7 @@ class AirplaneModeTileBehaviour(
                 "cmd connectivity airplane-mode enable",
                 context
             ) {
+                if (it?.isSuccess != true) TileSyncService.isTurningOnAirplaneMode = false
                 updateTile()
             }
         }

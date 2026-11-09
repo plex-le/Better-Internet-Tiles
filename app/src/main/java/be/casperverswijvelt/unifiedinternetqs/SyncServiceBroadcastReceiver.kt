@@ -11,9 +11,13 @@ class SyncServiceBroadcastReceiver: BroadcastReceiver() {
     }
     override fun onReceive(context: Context?, intent: Intent) {
         Log.d(TAG, "Received '${intent.action}' intent, starting TileSyncService")
-        context?.startForegroundService(Intent(
-            context,
-            TileSyncService::class.java
-        ))
+        try {
+            context?.startForegroundService(Intent(
+                context,
+                TileSyncService::class.java
+            ))
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to start TileSyncService from receiver", e)
+        }
     }
 }

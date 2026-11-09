@@ -36,6 +36,7 @@ abstract class ReportingTileService: TileService() {
     override fun onDestroy() {
         log("onDestroy")
 
+        TileSyncService.setQsListening(tileBehaviour.javaClass, false)
         tileBehaviour.removeUpdateTileListeners(onUpdateTile)
 
         super.onDestroy()
@@ -73,6 +74,7 @@ abstract class ReportingTileService: TileService() {
             }
         }
         TileSyncService.addBehaviourListener(tileBehaviour)
+        TileSyncService.setQsListening(tileBehaviour.javaClass, true)
         if (this is WifiTileService || this is InternetTileService) {
             TileSyncService.refreshWifiStatus(applicationContext, notifyTiles = false)
         }
@@ -81,6 +83,7 @@ abstract class ReportingTileService: TileService() {
 
     override fun onStopListening() {
         super.onStopListening()
+        TileSyncService.setQsListening(tileBehaviour.javaClass, false)
         TileSyncService.removeBehaviourListener(tileBehaviour)
         log("Stop listening")
     }
